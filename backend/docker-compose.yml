@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: armony_postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - armony_network
+    # --- MEJORA: Verificamos que Postgres esté listo para recibir conexiones ---
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    container_name: armony_fastapi_web
+    restart: always
+    # --- MEJORA: Comando para habilitar la auto-recarga del código en desarrollo ---
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/backend/app
+    # --- MEJORA: Carga automática del archivo .env ---
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - ALGORITHM=${ALGORITHM}
+    depends_on:
+      db:
+        # --- MEJORA: Solo inicia FastAPI si Postgres pasó el healthcheck ---
+        condition: service_healthy
+    networks:
+      - armony_network
+
+volumes:
+  postgres_data:
+
+networks:
+  armony_network:
+    driver: bridge
